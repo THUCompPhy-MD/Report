@@ -1,0 +1,109 @@
+
+\documentclass[UTF-8]{ctexart}
+\usepackage{amsmath,amsfonts,amssymb,bm,indentfirst,hyperref}
+\usepackage[cache=false]{minted}
+\title{计算物理大作业}
+\author{王宇逸\ 谷海桥\ 李禹苏}
+
+\begin{document}
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+\begin{abstract}
+    我们研究了由D.W.Brenner等人开发的分子动力学框架BrennerMD，分析了程序结构、使用算法，并使用程序进行了一定的模拟。
+    通过这一过程，更好地理解了分子动力学方法及其应用。
+\end{abstract}
+
+\section{框架概述}
+BrennerMD是由D.W.Brenner等人使用FORTRAN 77开发的分子动力学开源框架。
+尽管框架开源，但是由于年代久远，在互联网上难觅踪迹。
+现在唯一能找到源代码的网站在SourceForge.Net上（\url{https://sourceforge.net/projects/brennermd/}）。
+这个网站给出了源代码，并使用C语言重写了一份。
+
+FORTRAN 77是年代久远的数学编程语言。在那个还使用着打孔纸带的年代，有这样一门对数学运算友好的高级语言，一定是开发人员的首选。
+然而时过境迁，在现代人的眼光看来，FORTRAN 77对机器的软硬件所做的语法层面的妥协极不合理，而Fortran也在一次次版本迭代中与曾经的标准面目全非。
+因此，使用FORTRAN 77的框架鲜有人问津，只有一些“祖传”的代码因为难读、难改、组织混乱，而一直流传至今。
+
+\section{程序流程与结构}
+程序代码文件分为两部分。
+Execute文件夹提供了一份能够编译通过的代码，但是这些代码文件平铺在同一个文件夹中，比较混乱；
+Subroutines等文件夹又将这些代码文件按照功能分类，并给出了基本的README文件作为介绍。
+在Execute文件夹内，运行
+\begin{minted}{bash}
+    $ gfortran main.f -o main.x -std=legacy -g
+\end{minted}
+生成main.x可执行程序。
+“-g”选项加入调试符号，是为了在程序崩溃（这种情况经常发生）的时候给出清楚的调用栈。
+
+main.f文件内是程序的主函数，大致分为初始化与计算两部分，下面就这两部分分别介绍
+\subsection{初始化}
+初始化的步骤比较简单，按照如下顺序依次执行：
+\begin{minted}{fortran}
+    include 'open.inc'
+\end{minted}
+打开所有文件，并使用写死的、无规律的数字为其编号。
+\begin{minted}{fortran}
+    call setin
+\end{minted}
+setin函数初始化一些矩阵与常数。常数包括常用的粒子质量、$\pi$、玻尔兹曼常数等等。
+\begin{minted}{fortran}
+    call read_data
+\end{minted}
+read\_data函数读入两个文件的内容：编号为13的input.d与编号为11的coord.d。
+input.d记录了一些基本的模拟参数，如步数、记录步长间隔、初始温度、使用算法、使用框架等等，以及可选地更改一些粒子的基本属性。
+coord.d的输入输出在同一个文件，用于连续运行程序来模拟。包括文件头、粒子个数、时长、每一步的时间间隔、环境大小、初始坐标、速度、加速度、急动度等。
+读入工作有可能有参数不合理的地方，这个时候会直接报错并退出，使用类似
+\begin{minted}{fortran}
+    include 'close.inc'
+    stop
+\end{minted}
+的模式进行清理并退出。
+\begin{minted}{fortran}
+    call setpp
+    call setpc
+    call setgle
+\end{minted}
+setpp设置势函数的参数，主要是LJ势。
+setpc设置预测器校正参数。
+setgle设置朗之万参数。
+\begin{minted}{fortran}
+    call setran
+\end{minted}
+setran初始化随机数。
+首先使用读入的随机数中子pseed，调用setrn进行初始化；之后的随机数调用rannum即可。
+pseed也使用rannum更新一次，以保证下一次的种子与这次不同
+
+需要指出，rannum函数虽然接受一个参数，但是它并没有使用。
+更有趣的一点是，当我们搜索这个算法的时候，只能找到相同的代码，甚至注释都一样。
+那些函数无一例外都有这个没有被使用的参数。
+
+\subsection{计算}
+
+\section{程序算法}
+
+\section{程序应用}
+给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法与温度可以得到不同的结果。
+
+\section{总结}
+我们研究了BrennerMD这一框架，对于FORTRAN 77有了更深的了解，同时也有一次对于分子动力学模拟有了更深刻的认识。
+同时，我们也清楚地认识到，作为一名物理学研究者，使用程序语言清楚地表达自己地算法和思路是多么重要。
+
+通过对于BrennerMD框架的阅读与对于FORTRAN 77语言的学习，我们本着对于历史人物的同情得出这样的结论：
+FORTRAN 77的设计使得它完全无法胜任如此大规模程序的维护与扩展，同时，BrennerMD程序的组织与代码的混乱也给这一境况雪上加霜。
+这个框架之所以用FORTRAN 77编写，完全是因为当时没有相同性能的其它高级编程语言，而不是因为FORTRAN 77自身的设计合理。
+虽然在现代科学研究中，我们不再如此需要关注底层的框架是如何编写的，但是BrennerMD的bug过多，又不够健壮（robust），显然是不能胜任“基础框架”这一任务的。
+这个框架除了用于教学，已经没有特别的科研价值了。
+
+\section{分工}
+\paragraph{王宇逸}概述、初始化、应用
+\paragraph{谷海桥}预测修正
+\paragraph{李禹苏}能量最小化
+
+\section{致谢}
+感谢助教的帮助与同学们在群里的讨论。
+
+感谢Intel。尽管我们并没有用到他们的编译器，但是不同编译器的结果不同，证明了FORTRAN 77写程序是多么不易。
+
+\end{document}
