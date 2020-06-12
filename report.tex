@@ -168,7 +168,7 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
 
 \subsubsection{程序实现}
 \noindent
-\textbf{CPRED}
+\textbf{CONMIN}
 
 \noindent
 相关参数
@@ -181,12 +181,12 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
     \item IOUT： 用户设置的输出参数。
     \item RNP(I,J)：第 I 个原子在第 J 维上受到的力
     \item NFLAG：跳出 CONMIN 的具体原因。
-          \begin{enumerate}
+          \begin{itemize}
               \item NFLAG=0：算法已收敛。
               \item NFLAG=1：已经完成了预置的最大迭代数。
               \item NFLAG=2：线性搜索失败。函数或梯度没有被正确地编程计算通常会导致此情况。
               \item NFLAG=3：搜索方向不是最速下降方向。只可能由舍入误差引起，说明收敛精度 设置过高。
-          \end{enumerate}
+          \end{itemize}
 \end{itemize}
 
 \subsection{预测—校正算法}
@@ -561,32 +561,32 @@ Evans-Hoover方法，等温即等动能，引入外力，通过负反馈调节�
 以下图片给出的都是在10000K下模拟100步的结果，附录中给出了部分模拟结果的动画。
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim-1.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim-1.png}
     \caption{-1:GLEQ}
 \end{figure}
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim1.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim1.png}
     \caption{1:BERE修正力, 只用了3步就发散了}
 \end{figure}
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim2.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim2.png}
     \caption{2:ZERO}
 \end{figure}
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim3.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim3.png}
     \caption{3:HOOV}
 \end{figure}
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim5.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim5.png}
     \caption{5:BERE修正速度}
 \end{figure}
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=0.5\textwidth]{fig/sim8.png}
+    \includegraphics[width=0.8\textwidth]{fig/sim8.png}
     \caption{8:rescale}
 \end{figure}
 
