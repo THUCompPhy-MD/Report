@@ -294,20 +294,200 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
     \item MLIST：一维数组，存储非固定原子在所有原子中的编号
 \end{itemize}
 
+\subsection{THERMOS(恒温算法)}
+根据KFLAG调用不同的算法使系统达到恒温
 
+\noindent
+KFLAG具体含义：
 
+\begin{itemize}
+    \item -1: GLEQ，使用Langevin方程进行演化
+    \item  0：none，无
+    \item  1：BERE，使用Berendsen等温算法（修正力）
+    \item  2：ZERO，冷却到绝对零度
+    \item  3：HOOV，使用Evans-Hoover等温算法
+    \item  5：BERE，使用Berendsen等温算法（修正速度）
+    \item  6：MINIMIZE，最小能量
+    \item  8：rescale to minimize energy
+\end{itemize}
 
+\subsubsection{GLEQ}
 
+根据Langevin方程，在作用势的基础上引入摩擦项以及随机力项
 
+\begin{equation}
+    M\ddot{X} = -\nabla U(X) - \gamma \dot{X} + \sqrt{2\gamma K_BT}R(t)
+\end{equation}
 
+其中$R(t)$满足$\delta$相关平稳高斯分布，采用课上所讲的算法产生
 
+\begin{equation}
+    \left\{
+    \begin{aligned}
+        x & = \sqrt{-2\ln(\xi_1)}\cos(2\pi\xi_2) \\
+        y & = \sqrt{-2\ln(\xi_1)}\sin(2\pi\xi_2)
+    \end{aligned}
+    \right.
+\end{equation}
 
+$\xi_1$，$\xi_2$为(0, 1)上的均匀分布，这样一次可以产生两个满足(0, 1)高斯分布
+的随机数，由于共有NTA个需要热处理的原子，三个自由度共需产生3 * NTA个随机数，
+因而需要 3 * NTA / 2次循环，每次循环产生两个随机数并存储在GL数组的第 i 位和
+第(i + 3 * NTA / 2)位。为了避免对数发散，$\xi_1$过小时则直接产生0。
 
+\begin{minted}{fortran}
+    nlr = 3 * NTA / 2
+      
+  ! 产生 3 * NTA 个高斯分布随机数
+    DO 20 I = 1, NLR
+        RR = RANNUM(I)
+        IF(RR.LT.1.0D-06) GO TO 20   ! RR过小则直接舍弃，即产生0
+        PRE = SQRT(-2.0d0 * LOG(RR))
+        GL(I) = PRE * COS(PI2 * RANNUM(I)) * GSIG
+        GL(I + NLR) = PRE * SIN(PI2 * RANNUM(I)) * GSIG
+ 20 CONTINUE
 
+    ! 代入Langevin方程，计算每个原子三个方向上最终受力
+    DO 30 II = 1, NTA
+        I = NLIST(II)
+        BM = BET * XMASS(KTYPE(I))
+        SM = SQRT(XMASS(KTYPE(I)))
+        DO 29 J = 1, 3
+            rrzp = RNP(I,J)   ! 含义不明
+            RNP(I,J) = RNP(I,J) - BM * R1(I,J)-SM * GL(II + (J-1) * NTA)
+29      CONTINUE
+30  CONTINUE
+\end{minted}
 
+\noindent
+相关参数
 
+\begin{itemize}
+    \item NTA：非刚性原子数目
+    \item GL：一维数组，存储产生的乘以GSIG的高斯分布随机数
+    \item NLIST：一维数组，记录了需要热处理的原子在所有原子中的具体编号
+    \item KTYPE：一维数组，记录了对应编号原子的类型
+    \item XMASS：一维数组，记录了不同类型原子的质量
+    \item RNP：二维数组 (NP, 3)，记录了每个原子x，y，z三个方向上的受力
+    \item BM：对应方程中的$\gamma$，即$\gamma = BET * M$，BET具体定义可见setgle
+    \item SM：$\sqrt(M)$，GSIG * SM对应$\sqrt{2 BET * M * K_B T}$，GSIG具体定义可见setgle
+\end{itemize}
 
+仅对需要引入热耦的原子进行修正
 
+\subsubsection{BERE}
+
+Berendsen方法，假设体系与一个温度为T的恒温槽连在一起，两者可以通过热交换
+从而使体系温度保持恒定。由于温度反应体系的平均动能，通过负反馈调节所受外力或速度，
+使体系动能保持在$\frac{3}{2}NK_BT$，从而达到恒温T的目的。
+
+具体而言，可以通过引入附加的外力（对应KFLAG=1）
+
+\begin{equation}
+    F_j = (\frac{\frac{3}{2}NK_BT}{E_k} - 1)\gamma v_j
+\end{equation}
+或通过直接修正速度（对应KFALG=5）
+
+\begin{equation}
+    v'_{j} = \sqrt{\frac{\frac{3}{2}NK_BT}{E_k}}v_j
+\end{equation}
+
+主要代码如下
+\begin{minted}{fortran}
+    ! 计算总动能
+    XX = 0.0d0   ! 相当于动能
+    DO 11 J = 1, 3
+        DO 10 II = 1,NTA
+            I = NLIST(II)
+            XX = XX + (R1(I, J) * R1(I,J)) * XMASS(KTYPE(I))
+10      CONTINUE
+11  CONTINUE
+
+    ! 动能过小，说明温度为0K
+    if(xx.lt.0.0d-7) then
+        write(*,*) 'T=0, Reset Thermostat to other than 1'
+        stop
+    endif  
+
+    IF(KFLAG.EQ.1) THEN
+    ! KFALG = 1, 修正受力
+        SC = BET * (TR * DNLA / XX - 1.0d0)
+        DO 30 II = 1, NTA
+            I = NLIST(II)
+            SM = XMASS(KTYPE(I)) * SC
+            DO 29 J = 1,3  ! x,y,z三个方向修正受力
+                RNP(I,J) = RNP(I,J) + SM * R1(I,J)
+29          CONTINUE
+30      CONTINUE
+    ELSE
+    ! KFLAG = 5, 修正速度
+        SC = SQRT(TR * 6.0D0 * DELTSQ * FLOAT(NTA) / XX)
+        DO 32 II = 1, NTA
+            I = NLIST(II)
+            DO 31 J = 1, 3  ! x,y,z三个方向修正速度
+                R1(I,J) = SC * R1(I,J)
+31          CONTINUE
+32      CONTINUE
+
+    ENDIF
+\end{minted}
+
+\noindent
+相关参数
+
+\begin{itemize}
+    \item XX：动能乘以$2 delta^2$
+    \item DELTSQ：$2 delta^2$
+    \item NTA、NLIST、XMASS、KTYPE、RNP、R1含义同上
+\end{itemize}
+
+仅对需要引入热耦的原子进行修正
+
+\subsubsection{HOOV}
+
+Evans-Hoover方法，等温即等动能，引入外力，通过负反馈调节使体系动能保持不变
+
+\begin{equation}
+    F_j = -\frac{\sum^N_{i=0}f_i\cdot v_i}{2E_k}m_jv_j
+\end{equation}
+
+主要代码如下
+
+\begin{minted}{fortran}
+    FF = 0.0D0
+    DF = 0.0D0
+    DO 2 J = 1, 3
+        DO 1  I = 1, NP
+            FF = FF + RNP(I,J) * R1(I,J)  ! f * v
+            DF = DF + R1(I,J) * R1(I,J) * XMASS(KTYPE(I))  ! mv*v
+1       CONTINUE
+2   CONTINUE
+
+    SC = FF / DF
+
+    DO 4 J = 1, 3
+        DO 3 I = 1, NP
+            RNP(I,J) = RNP(I,J) - SC * R1(I,J) * XMASS(KTYPE(I))
+3       CONTINUE
+4   CONTINUE
+    
+\end{minted}
+
+\noindent
+相关参数
+
+\begin{itemize}
+    \item FF：体系$\sum^N_{i=0}f_i\cdot v_i$
+    \item DF：相当于体系总动能
+    \item NP：总原子数
+    \item RNP、R1、XMASS、KTYPE含义同上
+\end{itemize}
+
+对所有原子进行修正
+
+\subsubsection{ZERO}
+
+直接将所有原子速度清零
 
 \section{程序应用}
 给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法与温度可以得到不同的结果。
@@ -324,7 +504,7 @@ FORTRAN 77的设计使得它完全无法胜任如此大规模程序的维护与�
 
 \section{分工}
 \paragraph{王宇逸}概述、初始化、应用
-\paragraph{谷海桥}预测修正
+\paragraph{谷海桥}计算、预测修正、恒温算法
 \paragraph{李禹苏}能量最小化
 
 \section{致谢}
