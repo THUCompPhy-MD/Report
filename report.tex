@@ -1,7 +1,7 @@
-
-\documentclass[UTF-8]{ctexart}
+\documentclass{ctexart}
 \usepackage{amsmath,amsfonts,amssymb,bm,indentfirst,hyperref}
 \usepackage[cache=false]{minted}
+\usepackage{algorithm,algorithmic}
 \title{计算物理大作业}
 \author{王宇逸\ 谷海桥\ 李禹苏}
 
@@ -85,7 +85,6 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
 \begin{enumerate}
     \item KFLAG为6时调用minimize算法
 
-          balabala....
     \item 否则调用预测—校正算法进行分子动力学模拟：
 \end{enumerate}
 
@@ -121,8 +120,73 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
 最后调用write\_data3打印模拟结束后的最终坐标、速度、加速度、急动度等信息覆盖coord.d。
 
 \section{程序算法}
+\subsection{能量最小化}
 
-\subsection{预测—校正算法实现研究}
+算法的流程
+
+初始化，赋初值
+
+计算初始能量与受力
+
+求解稳定构形及最小能量
+
+调整坐标
+
+其中求解稳定构形及最小能量是这个子例程的核心，他主要应用了BFGS
+
+\subsubsection{算法原理}
+
+该程序使用的法为\textbf{BFGS}，具体原理如下:
+
+本质上是牛顿法的变形
+因为能量最小的点能量的导数是0，所以问题转化成一个求根问题，
+
+具体数学形式
+
+
+\begin{eqnarray}
+    H_{k}^{DFGS} &=& H_{k-1}^{DFGS} + \frac{1}{s_{k-1}^{T}y_{k-1}}[1+\frac{y_{k-1}^{T}H_{k-1}^{DFGS}y_{k-1}}{s_{k-1}^{T}y_{k-1}}]s_{k-1}s_{k-1}^{T}\nonumber\\
+    &&-\frac{1}{s_{k-1}^{T}y_{k-1}}(s_{k-1}y_{k-1}^{T}H_{k-1}^{DFGS}+H_{k-1}^{DFGS}y_{k-1}s_{k-1}^{T})d_{k}^{DFGS}\nonumber\\
+    &=& -H_{k}^{DFGS}g_{k}
+\end{eqnarray}
+
+简化的程序实现
+
+\begin{algorithm}
+    \begin{algorithmic}
+        \STATE $x[0] \leftarrow guess$
+        \STATE $b[0] \leftarrow I$
+        \FOR{k}
+        \STATE $s[k] \leftarrow b[k]^{-1} \nabla f(x[k])$
+        \STATE $x[k+1] \leftarrow x[k] + s[k]$
+        \STATE $y[k] \leftarrow \nabla f(x[k+1]) - \nabla f(x[k])$
+        \STATE $b[k+1] \leftarrow b[k] + \frac{y[k]y[k]^{T}}{y[k]^{T}s[k]} - \frac{b[k]s[k]s[k]^{T}b[k]}{s[k]^{T}b[k]s[k]}$
+        \ENDFOR
+    \end{algorithmic}
+\end{algorithm}
+
+\subsubsection{程序实现}
+\noindent
+\textbf{CPRED}
+
+\noindent
+相关参数
+\begin{itemize}
+    \item N：      THE NUMBER OF VARIABLES IN THE FUNCTION TO BE MINIMIZED.
+    \item X：双精度 N维矢量，保存当前得到的最小值的估计值的坐标位置；
+    \item F：双精度。当完成 CONMIN 时，F 将保存得到的目标函数的最小值
+    \item G：双精度 N维矢量。当完成 CONMIN 时，G 保存此时 X 点的梯度
+    \item IFUN：保存跳出 CONMIN 时总共做过的步数
+    \item IOUT： 用户设置的输出参数。
+    \item RNP(I,J)：第 I 个原子在第 J 维上受到的力
+    \item NFLAG：跳出 CONMIN 的具体原因。
+          NFLAG=0：算法已收敛。
+          NFLAG=1：已经完成了预置的最大迭代数。
+          NFLAG=2：线性搜索失败。函数或梯度没有被正确地编程计算通常会导致此情况。
+          NFLAG=3：搜索方向不是最速下降方向。只可能由舍入误差引起，说明收敛精度 设置过高。
+\end{itemize}
+
+\subsection{预测—校正算法}
 
 算法的流程上文已经提到，这里主要关注该算法的原理以及具体实现
 
@@ -236,10 +300,10 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
     tote = 0.0d0
 
     sss = noa(1) + noa(2) + noa(3) + noa(4)      ! 四种原子个数之和
-    if((ipot.eq.1).and.(sss.ne.0)) CALL CAGUTS   ！采用REBO势
+    if((ipot.eq.1).and.(sss.ne.0)) CALL CAGUTS   ! 采用REBO势
     if((ipot.eq.2).and.((noa(1) + noa(2) + noa(3)).ne.0)) call tight_bind  ! 采用紧束缚近似
     if(ILJ.eq.1) call ljguts    ! L-J势，具体未实现
-!     call ljcont
+!   call ljcont
 \end{minted}
 
 \noindent
@@ -294,77 +358,200 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
     \item MLIST：一维数组，存储非固定原子在所有原子中的编号
 \end{itemize}
 
+\subsection{THERMOS(恒温算法)}
+根据KFLAG调用不同的算法使系统达到恒温
 
-\subsection{能量最小化}
+\noindent
+KFLAG具体含义：
 
-算法的流程
-初始化，赋初值 
-计算初始能量与受力 
-求解稳定构形及最小能量 
-调整坐标 
+\begin{itemize}
+    \item -1: GLEQ，使用Langevin方程进行演化
+    \item  0：none，无
+    \item  1：BERE，使用Berendsen等温算法（修正力）
+    \item  2：ZERO，冷却到绝对零度
+    \item  3：HOOV，使用Evans-Hoover等温算法
+    \item  5：BERE，使用Berendsen等温算法（修正速度）
+    \item  6：MINIMIZE，最小能量
+    \item  8：rescale to minimize energy
+\end{itemize}
 
-其中求解稳定构形及最小能量是这个子例程的核心，他主要应用了BFGS
+\subsubsection{GLEQ}
 
-\subsubsection{算法原理}
-
-该程序使用的法为\textbf{BFGS}，具体原理如下:
-
-本质上是牛顿法的变形
-因为能量最小的点能量的导数是0，所以问题转化成一个求根问题，
-
-具体数学形式
-
+根据Langevin方程，在作用势的基础上引入摩擦项以及随机力项
 
 \begin{equation}
-    $H_{k}^{DFGS}$ = $H_{k-1}^{DFGS}$ + \frac{1}{$s_{k-1}^{T}$$y_{k-1}$}[1+\frac{$y_{k-1}^{T}$$H_{k-1}^{DFGS}$$y_{k-1}$}{$s_{k-1}^{T}$$y_{k-1}$}]$s_{k-1}$$s_{k-1}^{T}$
-            -\frac{1}{$s_{k-1}^{T}$$y_{k-1}$}($s_{k-1}$$y_{k-1}^{T}$$H_{k-1}^{DFGS}$+$H_{k-1}^{DFGS}$$y_{k-1}$$s_{k-1}^{T}$)
-    $d_{k}^{DFGS}$ = -$H_{k}^{DFGS}$$g_{k}$
+    M\ddot{X} = -\nabla U(X) - \gamma \dot{X} + \sqrt{2\gamma K_BT}R(t)
 \end{equation}
 
-简化的程序实现
+其中$R(t)$满足$\delta$相关平稳高斯分布，采用课上所讲的算法产生
 
-    x[0] = guess
-    b[0] = I
-    for k
-        s[k] = b[k]$^{-1}$ \nabla f(x[k])
-        x[k+1] = x[k] + s[k]
-    y[k] = \nabla f(x[k+1]) - \nabla f(x[k])
-    b[k+1] = b[k] + \frac{y[k]y[k]$^{T}$}{y[k]$^{T}$s[k]} - \frac{b[k]s[k]s[k]$^{T}$b[k]}{s[k]$^{T}$b[k]s[k]}
+\begin{equation}
+    \left\{
+    \begin{aligned}
+        x & = \sqrt{-2\ln(\xi_1)}\cos(2\pi\xi_2) \\
+        y & = \sqrt{-2\ln(\xi_1)}\sin(2\pi\xi_2)
+    \end{aligned}
+    \right.
+\end{equation}
 
+$\xi_1$，$\xi_2$为(0, 1)上的均匀分布，这样一次可以产生两个满足(0, 1)高斯分布
+的随机数，由于共有NTA个需要热处理的原子，三个自由度共需产生3 * NTA个随机数，
+因而需要 3 * NTA / 2次循环，每次循环产生两个随机数并存储在GL数组的第 i 位和
+第(i + 3 * NTA / 2)位。为了避免对数发散，$\xi_1$过小时则直接产生0。
 
-\subsubsection{程序实现}
-\noindent
-\textbf{CPRED}
+\begin{minted}{fortran}
+    nlr = 3 * NTA / 2
+      
+  ! 产生 3 * NTA 个高斯分布随机数
+    DO 20 I = 1, NLR
+        RR = RANNUM(I)
+        IF(RR.LT.1.0D-06) GO TO 20   ! RR过小则直接舍弃，即产生0
+        PRE = SQRT(-2.0d0 * LOG(RR))
+        GL(I) = PRE * COS(PI2 * RANNUM(I)) * GSIG
+        GL(I + NLR) = PRE * SIN(PI2 * RANNUM(I)) * GSIG
+ 20 CONTINUE
+
+    ! 代入Langevin方程，计算每个原子三个方向上最终受力
+    DO 30 II = 1, NTA
+        I = NLIST(II)
+        BM = BET * XMASS(KTYPE(I))
+        SM = SQRT(XMASS(KTYPE(I)))
+        DO 29 J = 1, 3
+            rrzp = RNP(I,J)   ! 含义不明
+            RNP(I,J) = RNP(I,J) - BM * R1(I,J)-SM * GL(II + (J-1) * NTA)
+29      CONTINUE
+30  CONTINUE
+\end{minted}
 
 \noindent
 相关参数
+
 \begin{itemize}
-    \item N：      THE NUMBER OF VARIABLES IN THE FUNCTION TO BE MINIMIZED.
-    \item X：双精度 N维矢量，保存当前得到的最小值的估计值的坐标位置； 
-    \item F：双精度。当完成 CONMIN 时，F 将保存得到的目标函数的最小值
-    \item G：双精度 N维矢量。当完成 CONMIN 时，G 保存此时 X 点的梯度
-    \item IFUN：保存跳出 CONMIN 时总共做过的步数
-    \item IOUT： 用户设置的输出参数。
-    \item RNP(I,J)：第 I 个原子在第 J 维上受到的力
-    \item NFLAG：跳出 CONMIN 的具体原因。 
-    NFLAG=0：算法已收敛。 
-    NFLAG=1：已经完成了预置的最大迭代数。 
-    NFLAG=2：线性搜索失败。函数或梯度没有被正确地编程计算通常会导致此情况。
-    NFLAG=3：搜索方向不是最速下降方向。只可能由舍入误差引起，说明收敛精度 设置过高。    
+    \item NTA：非刚性原子数目
+    \item GL：一维数组，存储产生的乘以GSIG的高斯分布随机数
+    \item NLIST：一维数组，记录了需要热处理的原子在所有原子中的具体编号
+    \item KTYPE：一维数组，记录了对应编号原子的类型
+    \item XMASS：一维数组，记录了不同类型原子的质量
+    \item RNP：二维数组 (NP, 3)，记录了每个原子x，y，z三个方向上的受力
+    \item BM：对应方程中的$\gamma$，即$\gamma = BET * M$，BET具体定义可见setgle
+    \item SM：$\sqrt(M)$，GSIG * SM对应$\sqrt{2 BET * M * K_B T}$，GSIG具体定义可见setgle
 \end{itemize}
 
+仅对需要引入热耦的原子进行修正
 
+\subsubsection{BERE}
 
+Berendsen方法，假设体系与一个温度为T的恒温槽连在一起，两者可以通过热交换
+从而使体系温度保持恒定。由于温度反应体系的平均动能，通过负反馈调节所受外力或速度，
+使体系动能保持在$\frac{3}{2}NK_BT$，从而达到恒温T的目的。
 
+具体而言，可以通过引入附加的外力（对应KFLAG=1）
 
+\begin{equation}
+    F_j = (\frac{\frac{3}{2}NK_BT}{E_k} - 1)\gamma v_j
+\end{equation}
+或通过直接修正速度（对应KFALG=5）
 
+\begin{equation}
+    v'_{j} = \sqrt{\frac{\frac{3}{2}NK_BT}{E_k}}v_j
+\end{equation}
 
+主要代码如下
+\begin{minted}{fortran}
+    ! 计算总动能
+    XX = 0.0d0   ! 相当于动能
+    DO 11 J = 1, 3
+        DO 10 II = 1,NTA
+            I = NLIST(II)
+            XX = XX + (R1(I, J) * R1(I,J)) * XMASS(KTYPE(I))
+10      CONTINUE
+11  CONTINUE
 
+    ! 动能过小，说明温度为0K
+    if(xx.lt.0.0d-7) then
+        write(*,*) 'T=0, Reset Thermostat to other than 1'
+        stop
+    endif  
 
+    IF(KFLAG.EQ.1) THEN
+    ! KFALG = 1, 修正受力
+        SC = BET * (TR * DNLA / XX - 1.0d0)
+        DO 30 II = 1, NTA
+            I = NLIST(II)
+            SM = XMASS(KTYPE(I)) * SC
+            DO 29 J = 1,3  ! x,y,z三个方向修正受力
+                RNP(I,J) = RNP(I,J) + SM * R1(I,J)
+29          CONTINUE
+30      CONTINUE
+    ELSE
+    ! KFLAG = 5, 修正速度
+        SC = SQRT(TR * 6.0D0 * DELTSQ * FLOAT(NTA) / XX)
+        DO 32 II = 1, NTA
+            I = NLIST(II)
+            DO 31 J = 1, 3  ! x,y,z三个方向修正速度
+                R1(I,J) = SC * R1(I,J)
+31          CONTINUE
+32      CONTINUE
 
+    ENDIF
+\end{minted}
 
+\noindent
+相关参数
 
+\begin{itemize}
+    \item XX：动能乘以$2 delta^2$
+    \item DELTSQ：$2 delta^2$
+    \item NTA、NLIST、XMASS、KTYPE、RNP、R1含义同上
+\end{itemize}
 
+仅对需要引入热耦的原子进行修正
+
+\subsubsection{HOOV}
+
+Evans-Hoover方法，等温即等动能，引入外力，通过负反馈调节使体系动能保持不变
+
+\begin{equation}
+    F_j = -\frac{\sum^N_{i=0}f_i\cdot v_i}{2E_k}m_jv_j
+\end{equation}
+
+主要代码如下
+
+\begin{minted}{fortran}
+    FF = 0.0D0
+    DF = 0.0D0
+    DO 2 J = 1, 3
+        DO 1  I = 1, NP
+            FF = FF + RNP(I,J) * R1(I,J)  ! f * v
+            DF = DF + R1(I,J) * R1(I,J) * XMASS(KTYPE(I))  ! mv*v
+1       CONTINUE
+2   CONTINUE
+
+    SC = FF / DF
+
+    DO 4 J = 1, 3
+        DO 3 I = 1, NP
+            RNP(I,J) = RNP(I,J) - SC * R1(I,J) * XMASS(KTYPE(I))
+3       CONTINUE
+4   CONTINUE
+    
+\end{minted}
+
+\noindent
+相关参数
+
+\begin{itemize}
+    \item FF：体系$\sum^N_{i=0}f_i\cdot v_i$
+    \item DF：相当于体系总动能
+    \item NP：总原子数
+    \item RNP、R1、XMASS、KTYPE含义同上
+\end{itemize}
+
+对所有原子进行修正
+
+\subsubsection{ZERO}
+
+直接将所有原子速度清零
 
 \section{程序应用}
 给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法与温度可以得到不同的结果。
@@ -381,7 +568,7 @@ FORTRAN 77的设计使得它完全无法胜任如此大规模程序的维护与�
 
 \section{分工}
 \paragraph{王宇逸}概述、初始化、应用
-\paragraph{谷海桥}预测修正
+\paragraph{谷海桥}计算、预测修正、恒温算法
 \paragraph{李禹苏}能量最小化
 
 \section{致谢}
