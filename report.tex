@@ -2,6 +2,7 @@
 \usepackage{amsmath,amsfonts,amssymb,bm,indentfirst,hyperref}
 \usepackage[cache=false]{minted}
 \usepackage{algorithm,algorithmic}
+\usepackage{graphicx}
 \title{计算物理大作业}
 \author{王宇逸\ 谷海桥\ 李禹苏}
 
@@ -554,7 +555,38 @@ Evans-Hoover方法，等温即等动能，引入外力，通过负反馈调节�
 直接将所有原子速度清零
 
 \section{程序应用}
-给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法与温度可以得到不同的结果。
+给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法可以得到不同的结果。
+以下图片给出的都是在10000K下模拟100步的结果，附录中给出了部分模拟结果的动画。
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim-1.png}
+    \caption{-1:GLEQ}
+\end{figure}
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim1.png}
+    \caption{1:BERE修正力, 只用了3步就发散了}
+\end{figure}
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim2.png}
+    \caption{2:ZERO}
+\end{figure}
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim3.png}
+    \caption{3:HOOV}
+\end{figure}
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim5.png}
+    \caption{5:BERE修正速度}
+\end{figure}
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\textwidth]{fig/sim8.png}
+    \caption{8:rescale}
+\end{figure}
 
 \section{总结}
 我们研究了BrennerMD这一框架，对于FORTRAN 77有了更深的了解，同时也有一次对于分子动力学模拟有了更深刻的认识。
