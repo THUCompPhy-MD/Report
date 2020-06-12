@@ -295,6 +295,63 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
 \end{itemize}
 
 
+\subsection{能量最小化}
+
+算法的流程
+初始化，赋初值 
+计算初始能量与受力 
+求解稳定构形及最小能量 
+调整坐标 
+
+其中求解稳定构形及最小能量是这个子例程的核心，他主要应用了BFGS
+
+\subsubsection{算法原理}
+
+该程序使用的法为\textbf{BFGS}，具体原理如下:
+
+本质上是牛顿法的变形
+因为能量最小的点能量的导数是0，所以问题转化成一个求根问题，
+
+具体数学形式
+
+
+\begin{equation}
+    $H_{k}^{DFGS}$ = $H_{k-1}^{DFGS}$ + \frac{1}{$s_{k-1}^{T}$$y_{k-1}$}[1+\frac{$y_{k-1}^{T}$$H_{k-1}^{DFGS}$$y_{k-1}$}{$s_{k-1}^{T}$$y_{k-1}$}]$s_{k-1}$$s_{k-1}^{T}$
+            -\frac{1}{$s_{k-1}^{T}$$y_{k-1}$}($s_{k-1}$$y_{k-1}^{T}$$H_{k-1}^{DFGS}$+$H_{k-1}^{DFGS}$$y_{k-1}$$s_{k-1}^{T}$)
+    $d_{k}^{DFGS}$ = -$H_{k}^{DFGS}$$g_{k}$
+\end{equation}
+
+简化的程序实现
+
+    x[0] = guess
+    b[0] = I
+    for k
+        s[k] = b[k]$^{-1}$ \nabla f(x[k])
+        x[k+1] = x[k] + s[k]
+    y[k] = \nabla f(x[k+1]) - \nabla f(x[k])
+    b[k+1] = b[k] + \frac{y[k]y[k]$^{T}$}{y[k]$^{T}$s[k]} - \frac{b[k]s[k]s[k]$^{T}$b[k]}{s[k]$^{T}$b[k]s[k]}
+
+
+\subsubsection{程序实现}
+\noindent
+\textbf{CPRED}
+
+\noindent
+相关参数
+\begin{itemize}
+    \item N：      THE NUMBER OF VARIABLES IN THE FUNCTION TO BE MINIMIZED.
+    \item X：双精度 N维矢量，保存当前得到的最小值的估计值的坐标位置； 
+    \item F：双精度。当完成 CONMIN 时，F 将保存得到的目标函数的最小值
+    \item G：双精度 N维矢量。当完成 CONMIN 时，G 保存此时 X 点的梯度
+    \item IFUN：保存跳出 CONMIN 时总共做过的步数
+    \item IOUT： 用户设置的输出参数。
+    \item RNP(I,J)：第 I 个原子在第 J 维上受到的力
+    \item NFLAG：跳出 CONMIN 的具体原因。 
+    NFLAG=0：算法已收敛。 
+    NFLAG=1：已经完成了预置的最大迭代数。 
+    NFLAG=2：线性搜索失败。函数或梯度没有被正确地编程计算通常会导致此情况。
+    NFLAG=3：搜索方向不是最速下降方向。只可能由舍入误差引起，说明收敛精度 设置过高。    
+\end{itemize}
 
 
 
