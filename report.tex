@@ -80,8 +80,234 @@ pseed也使用rannum更新一次，以保证下一次的种子与这次不同
 那些函数无一例外都有这个没有被使用的参数。
 
 \subsection{计算}
+计算过程分两种情况，根据KFLAG标志分别运行不同的算法，KFALG的具体含义可参见THERMOS部分。
+
+\begin{enumerate}
+    \item KFLAG为6时调用minimize算法
+
+          balabala....
+    \item 否则调用预测—校正算法进行分子动力学模拟：
+\end{enumerate}
+
+
+
+\begin{minted}{fortran}
+    call setmd
+\end{minted}
+调用setmd，初始化相关的参数设置并打印输出信息的表头。
+\begin{minted}{fortran}
+    DO LSTEP=1,KVC
+        call cpred  
+        CALL MODEL 
+        call thermos 
+        call ccorr
+        if(mod(LSTEP,nxmol).eq.0) call xmol
+        IF(KFLAG.EQ.5) CALL BERE
+        if(mod(LSTEP,maxkb).eq.0) then
+            call write_data2 
+        endif  
+!          call vscale 
+        ENDDO
+\end{minted}
+随后进行KVC次循环模拟运动轨迹，采用预测校正算法。每次循环的主要流程为如下：
+
+首先调用cpred进行位置、速度、加速度的预测，MODEL根据预测的位置信息计算每个原子x,y,z方向的受力，随后调用thermos引入热力学演化，最后调用ccorr对预测的位置、速度、加速度信息进行修正。
+
+每隔nxmol步调用xmol在xmol.d中打印坐标信息记录中间过程（若出现异常可以观察中间结果），每隔maxkb步打印步长、平均能量、动能、时间等相关信息。
+
+\begin{minted}{fortran}
+    call write_data3
+\end{minted}
+最后调用write\_data3打印模拟结束后的最终坐标、速度、加速度、急动度等信息覆盖coord.d。
 
 \section{程序算法}
+
+\subsection{预测—校正算法实现研究}
+
+算法的流程上文已经提到，这里主要关注该算法的原理以及具体实现
+
+\subsubsection{算法原理}
+
+该程序使用的预测—校正算法为\textbf{Nordsieck third-order predictor-corrector algorithm}，具体原理如下:
+
+对于微分方程
+\begin{equation}
+    \left\{
+    \begin{aligned}
+         & m\frac{d^2r(t)}{dt^2} = -\nabla U(r)     \\
+         & v(t) = h\frac{dr(t)}{dt}                 \\
+         & a(t) = \frac{h^2}{2}\frac{d^2r(t)}{dt^2} \\
+         & b(t) = \frac{h^3}{6}\frac{d^3r(t)}{dt^3}
+    \end{aligned}
+    \right.
+\end{equation}
+
+根据泰勒展开，有预测值
+\begin{equation}
+    \left\{\begin{aligned}
+        r^p(t + h) & = r(t) + v(t) + a(t) + b(t) \\
+        v^p(t + h) & = v(t) + 2a(t) + 3b(t)      \\
+        a^p(t + h) & = a(t) + 3b(t)
+    \end{aligned}
+    \right.
+\end{equation}
+
+根据预测值计算受力可得到加速度的修正
+
+\begin{equation}
+    \delta a(t + h) = a^p(t + h) - \frac{h^2}{2} \frac{F(t+h)}{m}
+\end{equation}
+
+利用该值对位置、速度、加速度、急动度进行修正
+
+\begin{equation}
+    \left\{\begin{aligned}
+        r^c(t + h) & = r^p(t+h) - \frac{1}{6}\delta a(t+h) \\
+        v^c(t + h) & = v^p(t+h) - \frac{5}{6}\delta a(t+h) \\
+        a^c(t + h) & = a^p(t+h) - \delta a(t+h)            \\
+        b^c(t + h) & = b^p(t+h) - \frac{1}{3}\delta a(t+h)
+    \end{aligned}
+    \right.
+\end{equation}
+
+\subsubsection{程序实现}
+
+\noindent
+\textbf{CPRED}
+
+根据KFLAG标志判断是否调用PRED进行预测，并增加时间步长。
+
+\noindent
+相关参数：
+\begin{itemize}
+    \item KFLAG：不同算法的标志（具体参见THERMOS）
+    \item NMA：非固定原子数目
+    \item TTIME：总时间，单位为fs
+    \item TIME：含义不明，似乎也为时间？
+    \item DELTA：时间步长
+\end{itemize}
+
+\noindent
+\textbf{PRED}
+
+使用泰勒展开计算预测的位置、速度、加速度信息，注意周期性边界条件的处理。
+
+\begin{minted}{fortran}
+    DO 31 J = 1, 3               ! x,y,z分别计算
+         DO 30 II = 1, NMA       ! 计算每个非固定原子
+              I = mlist(II)   ! 获取非固定原子编号
+              ! 原理中提到的算法
+              R0(I,J) = R0(I,J) + R1(I,J) + R2(I,J) + R3(I,J)
+              R1(I,J) = R1(I,J) + 2.0d0 * R2(I,J) + 3.0d0 * R3(I,J)
+              R2(I,J) = R2(I,J) + 3.0d0 * R3(I,J)
+              ! 周期性边界条件，ANINT为四舍五入取整
+              R0(I,J) = R0(I,J) - CUBE(J) * ANINT(R0(I,J) / CUBE(J))
+ 30      CONTINUE
+ 31 CONTINUE
+\end{minted}
+
+\noindent
+相关参数：
+\begin{itemize}
+    \item NMA：非固定原子数目
+    \item MLIST：一维数组，存储非固定原子在所有原子中的编号
+    \item R0：二维数组(NPMAX,3)，存储位置信息r(t)
+    \item R1：二维数组(NPMAX,3)，存储速度信息v(t)
+    \item R2：二维数组(NPMAX,3)，存储加速度信息a(t)
+    \item R3：二维数组(NPMAX,3)，存储急动度信息b(t)
+    \item CUBE：一维数组，存储模拟区域的长宽高
+\end{itemize}
+
+\noindent
+\textbf{MODEL}
+
+根据对应的模型计算每个原子三个方向的受力。首先将受力以及势能全部
+初始化为零，再根据不同情况调用相应的算法计算受力。
+
+\begin{minted}{fortran}
+! 将所有原子受力初始化为零 
+    DO J = 1, 3
+         DO I = 1, NP
+              rnp(i, j) = 0.0d0
+         ENDDO
+    ENDDO
+
+! 将势能初始化为零
+    tote = 0.0d0
+
+    sss = noa(1) + noa(2) + noa(3) + noa(4)      ! 四种原子个数之和
+    if((ipot.eq.1).and.(sss.ne.0)) CALL CAGUTS   ！采用REBO势
+    if((ipot.eq.2).and.((noa(1) + noa(2) + noa(3)).ne.0)) call tight_bind  ! 采用紧束缚近似
+    if(ILJ.eq.1) call ljguts    ! L-J势，具体未实现
+!     call ljcont
+\end{minted}
+
+\noindent
+相关参数：
+\begin{itemize}
+    \item NOA：一维数组，存储不同种类原子的数目
+    \item IPOT：1表示REBO势，2表示Tight-Binding模型
+    \item ILJ：L-J势的标志位
+\end{itemize}
+
+\noindent
+\textbf{CCORR}
+
+若KFLAG不为6或8（对应minimize），且非固定原子数不为0，则调用CORR对位置、速度、加速度进行修正。
+
+\noindent
+\textbf{CORR}
+
+采用原理中所述校正方法对之前预测的位置、速度、加速度进行修正。
+
+\begin{minted}{fortran}
+    SUBROUTINE CORR
+    IMPLICIT REAL*8(A-H,O-Z)
+    include 'common_files.inc'
+
+! 利用预测—校正算法进行修正
+    DE = DELTSQ / ECONV
+    DO 1 J = 1, 3
+    DO 2 II = 1, NMA
+         I = mlist(II)
+         XXM = XMASS(KTYPE(I))
+         ! 计算delta a(t + h)
+         RI = R2(I,J) - DE * RNP(I,J) / XXM
+         ! 修正结果，其中F02 = 1/6, F12 = 5/6, F32 = 1/3
+         R0(I,J) = R0(I,J) - RI * F02
+         R1(I,J) = R1(I,J) - RI * F12
+         R2(I,J) = R2(I,J) - RI
+         R3(I,J) = R3(I,J) - RI * F32
+         ! 周期性边界条件
+         R0(I,J) = R0(I,J) - CUBE(J) * ANINT(R0(I,J) / CUBE(J))
+
+ 2  CONTINUE
+ 1  CONTINUE
+\end{minted}
+
+\noindent
+相关参数：
+\begin{itemize}
+    \item RI：加速度修正
+    \item DE：$delta ^ 2 / 2$，delta为时间步长
+    \item XXM：原子质量
+    \item MLIST：一维数组，存储非固定原子在所有原子中的编号
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \section{程序应用}
 给出的代码中，已经提供了金刚石晶体的数据以供模拟。我们通过更换算法与温度可以得到不同的结果。
