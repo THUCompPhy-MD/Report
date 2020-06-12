@@ -5,7 +5,7 @@
 \usepackage{graphicx}
 \title{计算物理大作业}
 \author{王宇逸\ 谷海桥\ 李禹苏}
-
+\bibliographystyle{plain}
 \begin{document}
 \maketitle
 \newpage
@@ -608,4 +608,7 @@ FORTRAN 77的设计使得它完全无法胜任如此大规模程序的维护与�
 
 感谢Intel。尽管我们并没有用到他们的编译器，但是不同编译器的结果不同，证明了FORTRAN 77写程序是多么不易。
 
+\renewcommand{\refname}{参考文献}
+\bibliography{report.bib}
+\nocite{*}
 \end{document}
